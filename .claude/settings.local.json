@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf data/raw/*.grib2* data/processed/wind_merged.nc outputs/textures/*)",
+      "Bash(.venv/Scripts/python.exe -m src.wind_toolkit.main --forecast-hours 2)",
+      "Bash(rm -f outputs/textures/*)",
+      "Bash(.venv/Scripts/python.exe -m src.wind_toolkit.main --process-only)"
+    ]
+  }
+}

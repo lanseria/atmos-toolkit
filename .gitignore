@@ -1,0 +1,18 @@
+# 数据和输出
+data/
+outputs/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+
+# 环境
+.env
+
+# IDE
+.vscode/
+.idea/
