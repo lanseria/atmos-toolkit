@@ -8,6 +8,7 @@ import xarray as xr
 
 from . import config
 from .map_visualizer import generate_wind_map
+from .tile_generator import generate_tiles
 from .utils import format_timestamp, setup_logger
 
 logger = setup_logger("wind_toolkit.processor")
@@ -53,6 +54,8 @@ def process_to_textures(nc_path: Path) -> list[Path]:
 
         out_path = config.TEXTURES_DIR / f"{stamp}.png"
         generate_wind_map(u_data, v_data, lat_vals, lon_vals, t, out_path)
+
+        generate_tiles(out_path, stamp)
 
         output_files.append(out_path)
         if (i + 1) % 5 == 0 or i == len(times) - 1:

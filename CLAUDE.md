@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Wind Toolkit 是一个 Python GFS 风场数据获取与地图可视化工具。它从 NOAA GFS（Global Forecast System）0.25° 预报数据集下载 10m 风场（U/V 分量），生成暗色主题的精美风场地图 PNG（风速色斑 + 风向箭头 + 海岸线国界 + 城市标注 + colorbar）。Python 3.12+，使用 uv 管理依赖。
+Wind Toolkit 是一个 Python GFS 风场数据获取与地图可视化工具。它从 NOAA GFS（Global Forecast System）0.25° 预报数据集下载 10m 风场（U/V 分量），生成暗色主题的精美风场地图 PNG（风速色斑 + 风向箭头 + 海岸线国界 + colorbar），并切割为 XYZ 瓦片供 Web 地图使用。Python 3.12+，使用 uv 管理依赖。
 
 ## Commands
 
@@ -16,6 +16,12 @@ python -m src.wind_toolkit.main --acquire-only        # 仅下载数据
 python -m src.wind_toolkit.main --process-only        # 仅生成地图（使用已有数据）
 python -m src.wind_toolkit.main --schedule 5          # 每 5 分钟执行一次
 python -m src.wind_toolkit.main --forecast-hours 48   # 获取 48 小时预报
+
+# Docker 部署
+docker compose build                                  # 构建镜像
+docker compose up -d                                  # 后台运行（默认每 30 分钟定时执行）
+docker compose logs -f                                # 查看日志
+docker compose run --rm app --process-only            # 一次性运行（仅生成地图）
 ```
 
 ## Architecture
@@ -24,6 +30,7 @@ python -m src.wind_toolkit.main --forecast-hours 48   # 获取 48 小时预报
 
 1. **数据获取** (`data_acquisition.py`): 通过 NOMADS GRIB Filter 下载 GFS 0.25° 的 U10/V10 风场分量，自动检测最新可用预报周期，每个预报时刻下载一个 GRIB2 子集（仅请求变量+区域的子集），合并裁切到展示区域后保存为 `data/processed/wind_merged.nc`
 2. **地图生成** (`processor.py` + `map_visualizer.py`): 加载 NetCDF → 逐帧调用 `generate_wind_map()` 生成暗色主题风场地图 PNG，输出到 `outputs/textures/`
+3. **瓦片生成** (`tile_generator.py`): 将 PlateCarree 投影的风场地图切割为 Web Mercator XYZ 瓦片，缩放级别 3-8，输出到 `outputs/tiles/{z}/{x}/{y}/{timestamp}.png`
 
 ### 地图可视化要素
 
@@ -31,7 +38,6 @@ python -m src.wind_toolkit.main --forecast-hours 48   # 获取 48 小时预报
 - **风速色斑**: contourf 填充等值线，自定义深蓝→青→绿→黄→橙→红 colormap，高斯平滑 + 4x 三次插值
 - **风向箭头**: quiver 叠加，半透明白色箭头
 - **地理要素**: 海岸线、中国国界 shapefile、九段线
-- **城市标注**: 白色圆点 + 中文城市名（LXGW WenKai 字体），半透明深色背景框
 - **辅助元素**: colorbar（风速 m/s）、经纬度网格线、UTC/BJT 双时区标题
 
 ### 核心模块
@@ -40,8 +46,9 @@ python -m src.wind_toolkit.main --forecast-hours 48   # 获取 48 小时预报
 |------|------|
 | `config.py` | 中央配置：地理范围、GFS 参数、地图可视化配置、路径常量 |
 | `data_acquisition.py` | NOMADS GRIB Filter 下载、自动周期检测、合并裁切 |
-| `processor.py` | NetCDF 加载、变量名识别、逐帧调用地图生成 |
+| `processor.py` | NetCDF 加载、变量名识别、逐帧调用地图生成与瓦片切割 |
 | `map_visualizer.py` | 暗色主题风场地图渲染：字体、colormap、cartopy 绘图 |
+| `tile_generator.py` | XYZ 瓦片生成：PlateCarree→Web Mercator 重投影切割 |
 | `main.py` | CLI 入口：完整流水线 / 定时模式 / 单阶段执行 |
 | `utils.py` | 通用工具：logger、时区转换、时间戳格式化 |
 
@@ -52,12 +59,14 @@ python -m src.wind_toolkit.main --forecast-hours 48   # 获取 48 小时预报
 - **自动周期检测**: 自动回溯查找最新可用 GFS 预报周期（通常延迟约 4 小时）
 - **视觉增强**: 高斯平滑(sigma=1.5) + 4x 三次插值，使风速色斑过渡平滑
 - **字体系统**: 优先加载 chromasky-toolkit 共享的 LXGW WenKai 字体，回退到系统中文字体
+- **XYZ 瓦片**: 将 PlateCarree 渲染的地图通过 `scipy.ndimage.map_coordinates` 双线性重投影为 Web Mercator 瓦片（zoom 3-8，256×256）
 
 ### 路径约定
 
 - 源码在 `src/wind_toolkit/`
 - `config.py` 中 `PROJECT_ROOT` = `src/` 目录，所有数据路径使用 `PROJECT_ROOT.parent / "xxx"`
-- 地图资源（shapefile、字体、城市 CSV）引用 `../chromasky-toolkit/` 的共享资源
+- 地图资源（shapefile、字体）默认引用 `../chromasky-toolkit/` 共享资源，Docker 部署时通过 `MAP_DATA_ROOT` 环境变量覆盖
+- Docker 镜像构建时通过 `tools/setup_map_data.py` 下载地图数据和字体到容器内
 - 无需 `.env` 即可运行（所有配置有默认值），但可通过 `.env` 覆盖
 
 ## Code Style

@@ -10,7 +10,6 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
-import pandas as pd
 import xarray as xr
 from cartopy.io import shapereader
 from scipy.ndimage import gaussian_filter
@@ -147,20 +146,20 @@ def generate_wind_map(
     cbar.ax.yaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
-    # 风向箭头（稀疏采样）
-    skip_lat = max(1, len(vis_lats) // 20)
-    skip_lon = max(1, len(vis_lons) // 20)
+    # 风向箭头（精细稀疏采样）
+    skip_lat = max(1, len(vis_lats) // 30)
+    skip_lon = max(1, len(vis_lons) // 30)
     ax.quiver(
         vis_lons[::skip_lon],
         vis_lats[::skip_lat],
         u_hi[::skip_lat, ::skip_lon],
         v_hi[::skip_lat, ::skip_lon],
         color="white",
-        alpha=0.8,
-        scale=150,
-        width=0.003,
-        headwidth=4,
-        headlength=5,
+        alpha=0.5,
+        scale=250,
+        width=0.002,
+        headwidth=3,
+        headlength=4,
         transform=proj,
         zorder=5,
     )
@@ -190,30 +189,6 @@ def generate_wind_map(
         linewidth=0.5,
         zorder=2,
     )
-
-    # 城市标注
-    if config.CITIES_CSV_PATH.exists():
-        df = pd.read_csv(config.CITIES_CSV_PATH)
-        ax.plot(
-            df["lon"], df["lat"], "o",
-            color="white", markersize=2, alpha=0.7,
-            transform=proj, zorder=6,
-        )
-        for _, city in df.iterrows():
-            name = city["name"] if CHINESE_FONT_FOUND else city["name_en"]
-            text_kw = dict(
-                color="white", fontsize=9, alpha=0.95,
-                transform=proj, zorder=10,
-                fontweight="bold",
-                bbox=dict(
-                    boxstyle="round,pad=0.15",
-                    facecolor="black", alpha=0.55,
-                    edgecolor="none",
-                ),
-            )
-            if _font_properties is not None:
-                text_kw["fontproperties"] = _font_properties
-            ax.text(city["lon"] + 0.3, city["lat"] + 0.3, name, **text_kw)
 
     # 网格线
     gl = ax.gridlines(

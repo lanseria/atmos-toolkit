@@ -18,8 +18,9 @@ RAW_DATA_DIR: Path = DATA_DIR / "raw"
 PROCESSED_DATA_DIR: Path = DATA_DIR / "processed"
 OUTPUTS_DIR: Path = PROJECT_ROOT.parent / "outputs"
 TEXTURES_DIR: Path = OUTPUTS_DIR / "textures"
+TILE_OUTPUT_DIR: Path = OUTPUTS_DIR / "tiles"
 
-for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR, TEXTURES_DIR):
+for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR, TEXTURES_DIR, TILE_OUTPUT_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── GFS 数据源 ─────────────────────────────────────────────────────────
@@ -50,10 +51,12 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 UTC = timezone.utc
 
 # ── 地图可视化 ─────────────────────────────────────────────────────────
-# 地图数据（复用 chromasky-toolkit 资源）
-_CHROMASKY_DIR: Path = PROJECT_ROOT.parent.parent / "chromasky-toolkit"
-MAP_DATA_DIR: Path = _CHROMASKY_DIR / "map_data"
-FONT_DIR: Path = _CHROMASKY_DIR / "fonts"
+# 地图数据路径（支持环境变量覆盖，Docker 部署时设为 /app）
+_MAP_DATA_ROOT: Path = Path(
+    os.environ.get("MAP_DATA_ROOT", str(PROJECT_ROOT.parent.parent / "chromasky-toolkit"))
+)
+MAP_DATA_DIR: Path = _MAP_DATA_ROOT / "map_data"
+FONT_DIR: Path = _MAP_DATA_ROOT / "fonts"
 CHINA_SHP_PATH: Path = MAP_DATA_DIR / "china.shp"
 NINE_DASH_LINE_SHP_PATH: Path = MAP_DATA_DIR / "china_nine_dotted_line.shp"
 CITIES_CSV_PATH: Path = MAP_DATA_DIR / "china_cities.csv"
@@ -71,6 +74,11 @@ WIND_COLOR_NODES: list[float] = [
     0.35, 0.48, 0.60, 0.72, 0.85,
     0.93, 1.0,
 ]
+
+# ── 瓦片 ───────────────────────────────────────────────────────────────
+TILE_ZOOM_MIN: int = 3
+TILE_ZOOM_MAX: int = 8
+TILE_SIZE: int = 256
 
 # ── 并行 ───────────────────────────────────────────────────────────────
 NUM_WORKERS: int = int(
