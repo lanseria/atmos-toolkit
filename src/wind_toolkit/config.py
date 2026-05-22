@@ -56,6 +56,11 @@ def raw_data_dir_for_level(hpa: int) -> Path:
 def processed_data_dir_for_level(hpa: int) -> Path:
     return PROCESSED_DATA_DIR / level_key(hpa)
 
+
+def particle_data_dir_for_level(hpa: int) -> Path:
+    """粒子风场 JSON 数据目录。"""
+    return tile_dir_for_level(hpa) / "particle"
+
 for _d in (RAW_DATA_DIR, PROCESSED_DATA_DIR, TEXTURES_DIR, WIND_TILES_ROOT):
     _d.mkdir(parents=True, exist_ok=True)
 

@@ -260,12 +260,14 @@ def generate_wind_tiles(
 def update_tiles_manifest(
     datetimes: list[datetime],
     manifest_path: Path | None = None,
+    particle_dir: Path | None = None,
 ) -> None:
     """更新瓦片资源清单文件。
 
     Args:
         datetimes: datetime 对象列表
         manifest_path: 清单文件路径，为 None 时不更新
+        particle_dir: 粒子数据目录，为 None 时不记录 particle 信息
     """
     if manifest_path is None:
         return
@@ -286,6 +288,16 @@ def update_tiles_manifest(
     merged = sorted(set(new_ts) | existing)
     manifest["timestamps"] = merged
     manifest["lastUpdated"] = now
+
+    # 粒子数据文件列表
+    if particle_dir is not None:
+        particle_files = sorted(
+            f.name for f in particle_dir.glob("*.json")
+        ) if particle_dir.exists() else []
+        manifest["particle"] = {
+            "available": len(particle_files) > 0,
+            "filenames": particle_files,
+        }
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with open(manifest_path, "w", encoding="utf-8") as f:

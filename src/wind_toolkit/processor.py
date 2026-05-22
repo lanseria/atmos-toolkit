@@ -10,6 +10,7 @@ from . import config
 from .map_visualizer import generate_wind_map
 from .tile_generator import generate_wind_tiles, update_tiles_manifest
 from .utils import format_timestamp, setup_logger
+from .wind_data_generator import generate_wind_particle_data
 
 logger = setup_logger("wind_toolkit.processor")
 
@@ -67,12 +68,18 @@ def process_to_textures(nc_path: Path, level: dict) -> list[Path]:
 
         generate_wind_tiles(u_data, v_data, lat_vals, lon_vals, stamp, output_dir=tile_dir)
 
+        generate_wind_particle_data(
+            u_data, v_data, lat_vals, lon_vals, stamp,
+            level_hpa=level["hpa"], ref_time=t,
+        )
+
         output_files.append(out_path)
         if (i + 1) % 5 == 0 or i == len(times) - 1:
             logger.info(f"  [{level['label']}] 进度: {i + 1}/{len(times)} 帧")
 
     ds.close()
-    update_tiles_manifest(datetimes, manifest_path)
+    particle_dir = config.particle_data_dir_for_level(level["hpa"])
+    update_tiles_manifest(datetimes, manifest_path, particle_dir=particle_dir)
     logger.info(f"[{level['label']}] 地图生成完成: {len(output_files)} 张 → {textures_dir}")
     return output_files
 
