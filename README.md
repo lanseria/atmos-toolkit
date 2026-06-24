@@ -40,7 +40,7 @@ NOAA GFS 0.25° 8 层等压面 Wind → GRIB Filter 子集下载 → NetCDF (UGR
 
 1. **数据获取**：通过 NOMADS GRIB Filter API 下载 GFS 8 个等压面风场子集（仅请求 UGRD/VGRD 变量 + 对应等压面 + 指定区域），自动回溯检测最新可用预报周期
 2. **地图生成**：加载 NetCDF → 高斯平滑（sigma=1.5）+ 4× 三次插值增强 → cartopy 暗色主题地图渲染 PNG
-3. **瓦片生成**：从原始风场数据直接生成透明 RGBA 叠加层 → PlateCarree 重投影为 Web Mercator XYZ 瓦片（zoom 3–8，256×256）
+3. **瓦片生成**：从原始风场数据直接生成透明 RGBA 叠加层 → PlateCarree 重投影为 Web Mercator XYZ 瓦片（zoom 3–4，256×256）
 4. **瓦片清单**：每层生成 `tiles_manifest.json`（`lastUpdated` + Unix 时间戳数组），客户端可轮询获取可用时刻
 
 ## 输出说明
@@ -60,7 +60,7 @@ NOAA GFS 0.25° 8 层等压面 Wind → GRIB Filter 子集下载 → NetCDF (UGR
 
 - 风速色斑 alpha = 0.8，无数据区域全透明
 - 风向箭头白色 alpha = 0.5
-- Web Mercator 投影（EPSG:3857），zoom 3–8，256×256
+- Web Mercator 投影（EPSG:3857），zoom 3–4，256×256
 - 每个瓦片文件名按时间戳区分：`{z}/{x}/{y}/{unix_timestamp}.png`
 - 每层独立目录：`wind-tiles/850hPa/`、`wind-tiles/500hPa/` 等
 

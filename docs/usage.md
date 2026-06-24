@@ -37,7 +37,7 @@ wind-tiles/
 ### 瓦片规格
 
 - **投影**: Web Mercator (EPSG:3857)
-- **缩放级别**: 3 – 8
+- **缩放级别**: 3 – 4
 - **瓦片尺寸**: 256 × 256
 - **格式**: PNG with RGBA（透明背景）
 - **XYZ URL**: `{base}/{level}/{z}/{x}/{y}/{timestamp}.png`
