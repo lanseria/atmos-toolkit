@@ -31,7 +31,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MPLCONFIGDIR=/app/config/matplotlib \
     CARTOPY_DATA_DIR=/app/data/cartopy_data \
     MAP_DATA_ROOT=/app \
-    UV_TOOL_BIN_DIR=/usr/local/bin
+    UV_TOOL_BIN_DIR=/usr/local/bin \
+    TZ=Asia/Shanghai
 
 # --- 4. 安装 Python 依赖（利用 BuildKit 缓存） ---
 RUN --mount=type=cache,target=/root/.cache/uv \
