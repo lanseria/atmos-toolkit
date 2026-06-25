@@ -288,7 +288,10 @@ def main() -> None:
     var_names = _resolve_var_names(args)
 
     if args.schedule:
-        run_scheduled(args.forecast_hours, var_names)
+        # 调度模式：仅当 CLI 显式指定变量时使用 CLI 值，
+        # 否则传 None 让 run_scheduled 从 SCHEDULE_VARIABLES 环境变量读取
+        has_cli_vars = args.variable or args.variables or args.all_variables
+        run_scheduled(args.forecast_hours, var_names if has_cli_vars else None)
     elif args.acquire_only:
         run_acquisition(args.forecast_hours, var_names, args.level)
     elif args.process_only:
