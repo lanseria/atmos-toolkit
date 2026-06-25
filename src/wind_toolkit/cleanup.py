@@ -1,8 +1,11 @@
 """过期数据清理模块。
 
 在每次定时任务执行前清理超过指定天数的数据：
-- 瓦片 PNG、纹理 PNG、粒子 JSON、原始数据、处理后数据
+- 瓦片 PNG、纹理 PNG、粒子 JSON（仅风场）、原始数据、处理后数据
 - 更新 tiles_manifest.json 移除过期时间戳
+
+支持任意 (variable, level) 组合的清理。`cleanup_old_data(level_hpa)` 保留为
+风场等压面专用入口（向后兼容）。
 """
 
 import json
@@ -18,34 +21,59 @@ logger = setup_logger("wind_toolkit.cleanup")
 DEFAULT_MAX_AGE_DAYS = 2
 
 
-def cleanup_old_data(level_hpa: int, max_age_days: int = DEFAULT_MAX_AGE_DAYS) -> None:
-    """清理指定等压面层中超过 max_age_days 天的所有数据。"""
+def cleanup_old_data_for_variable(
+    var_name: str,
+    hpa: int | None = None,
+    single_level_key: str | None = None,
+    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
+) -> None:
+    """清理指定 (variable, level) 中超过 max_age_days 天的所有数据。"""
+    var_cfg = config.VARIABLES[var_name]
+    single_level_key = single_level_key or var_cfg.get("single_level_key")
+    level_token = config._level_token(hpa, single_level_key)
     cutoff = int((datetime.now(timezone.utc) - timedelta(days=max_age_days)).timestamp())
-    level_label = f"{level_hpa}hPa"
-    logger.info(f"开始清理 {level_label} 中超过 {max_age_days} 天的数据（截止时间戳: {cutoff}）")
+    logger.info(
+        f"开始清理 {var_name}/{level_token} 中超过 {max_age_days} 天的数据"
+        f"（截止时间戳: {cutoff}）"
+    )
 
-    # 瓦片 PNG: wind-tiles/{level}/{z}/{x}/{y}/{timestamp}.png
-    tile_dir = config.tile_dir_for_level(level_hpa)
+    # 瓦片 PNG: wind-tiles/{var}/{level}/{z}/{x}/{y}/{timestamp}.png
+    tile_dir = config.tile_dir_for(var_name, hpa=hpa, single_level_key=single_level_key)
     tile_count = _cleanup_timestamped_files(tile_dir, ".png", cutoff, recursive=True)
 
-    # 粒子 JSON: wind-tiles/{level}/particle/{timestamp}.json
-    particle_dir = config.particle_data_dir_for_level(level_hpa)
-    particle_count = _cleanup_timestamped_files(particle_dir, ".json", cutoff)
+    # 粒子 JSON: wind-tiles/{var}/{level}/particle/{timestamp}.json（仅风场）
+    particle_dir = config.particle_data_dir_for(
+        var_name, hpa=hpa, single_level_key=single_level_key
+    )
+    particle_count = (
+        _cleanup_timestamped_files(particle_dir, ".json", cutoff) if particle_dir else 0
+    )
 
-    # 纹理 PNG: outputs/textures/{level}/{timestamp}.png
-    textures_dir = config.textures_dir_for_level(level_hpa)
+    # 纹理 PNG: outputs/textures/{var}/{level}/{timestamp}.png
+    textures_dir = config.textures_dir_for(
+        var_name, hpa=hpa, single_level_key=single_level_key
+    )
     texture_count = _cleanup_timestamped_files(textures_dir, ".png", cutoff)
 
-    # 原始数据: data/raw/{level}/
-    raw_dir = config.raw_data_dir_for_level(level_hpa)
+    # 原始数据: data/raw/{var}/{level}/
+    raw_dir = config.raw_data_dir_for(
+        var_name, hpa=hpa, single_level_key=single_level_key
+    )
     raw_count = _cleanup_directory_contents(raw_dir, cutoff)
 
-    # 处理后数据: data/processed/{level}/
-    processed_dir = config.processed_data_dir_for_level(level_hpa)
+    # 处理后数据: data/processed/{var}/{level}/
+    processed_dir = config.processed_data_dir_for(
+        var_name, hpa=hpa, single_level_key=single_level_key
+    )
     processed_count = _cleanup_directory_contents(processed_dir, cutoff)
 
     # 更新 manifest
-    manifest_count = _cleanup_manifest(level_hpa, cutoff)
+    manifest_count = _cleanup_manifest(
+        config.tile_manifest_for(
+            var_name, hpa=hpa, single_level_key=single_level_key
+        ),
+        cutoff,
+    )
 
     # 清理空目录
     _cleanup_empty_dirs(tile_dir)
@@ -53,10 +81,15 @@ def cleanup_old_data(level_hpa: int, max_age_days: int = DEFAULT_MAX_AGE_DAYS) -
 
     total = tile_count + particle_count + texture_count + raw_count + processed_count
     logger.info(
-        f"清理完成: 瓦片 {tile_count}, 粒子 {particle_count}, "
+        f"清理完成 {var_name}/{level_token}: 瓦片 {tile_count}, 粒子 {particle_count}, "
         f"纹理 {texture_count}, 原始数据 {raw_count}, "
         f"处理后数据 {processed_count}, manifest 时间戳 {manifest_count}"
     )
+
+
+def cleanup_old_data(level_hpa: int, max_age_days: int = DEFAULT_MAX_AGE_DAYS) -> None:
+    """向后兼容：清理 wind 等压面层中超过 max_age_days 天的数据。"""
+    cleanup_old_data_for_variable("wind", hpa=level_hpa, max_age_days=max_age_days)
 
 
 def _parse_timestamp(filename: str, suffix: str) -> int | None:
@@ -118,9 +151,8 @@ def _cleanup_directory_contents(directory: Path, cutoff: int) -> int:
     return count
 
 
-def _cleanup_manifest(level_hpa: int, cutoff: int) -> int:
+def _cleanup_manifest(manifest_path: Path, cutoff: int) -> int:
     """从 tiles_manifest.json 中移除过期时间戳。"""
-    manifest_path = config.tile_manifest_for_level(level_hpa)
     if not manifest_path.exists():
         return 0
 
@@ -131,7 +163,7 @@ def _cleanup_manifest(level_hpa: int, cutoff: int) -> int:
     manifest["timestamps"] = [ts for ts in manifest.get("timestamps", []) if ts >= cutoff]
     removed = old_count - len(manifest["timestamps"])
 
-    # 同步清理 particle filenames
+    # 同步清理 particle filenames（仅风场 manifest 含 particle 字段）
     if "particle" in manifest:
         old_particle = manifest["particle"].get("filenames", [])
         new_particle = [

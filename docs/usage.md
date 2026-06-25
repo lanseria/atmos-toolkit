@@ -1,9 +1,9 @@
 # Wind Toolkit 前端使用指南
 
-Wind Toolkit 输出两种可叠加在 Web 地图上的风场数据：
+Wind Toolkit 输出 16 种气象变量的可叠加 Web 地图数据：
 
-- **XYZ 瓦片**（透明 RGBA PNG）：风速色斑 + 风向箭头，以 `raster` 图层叠加
-- **粒子 JSON**（wind-layer jsonArray 格式）：用于动态风力粒子流动效果
+- **XYZ 瓦片**（透明 RGBA PNG）：数据色斑（风场含风向箭头），以 `raster` 图层叠加
+- **粒子 JSON**（wind-layer jsonArray 格式，仅风场）：用于动态风力粒子流动效果
 
 两种数据可独立使用，也可叠加形成色斑底 + 流动粒子的组合效果。
 
@@ -11,28 +11,51 @@ Wind Toolkit 输出两种可叠加在 Web 地图上的风场数据：
 
 ## 目录结构
 
-瓦片与粒子数据按等压面层分目录存储，文件名均为 Unix 时间戳（秒）：
+瓦片与粒子数据按 **变量 + 层级** 分目录存储，文件名均为 Unix 时间戳（秒）：
 
 ```
 wind-tiles/
-  850hPa/
-    tiles_manifest.json              ← 该层可用时间戳清单
-    particle/                        ← 粒子风场 JSON 数据
-      1779062400.json
-      1779066000.json
+  wind/                                  ← 风场（含粒子）
+    850hPa/
+      tiles_manifest.json                ← 该变量+层级可用时间戳清单
+      particle/                          ← 粒子风场 JSON（仅 wind 变量）
+        1779062400.json
+        1779066000.json
+      3/{x}/{y}/1779062400.png           ← 透明 RGBA 瓦片
+    500hPa/
       ...
-    3/{x}/{y}/1779062400.png         ← 透明 RGBA 瓦片
-    3/{x}/{y}/1779066000.png
-    ...
-  500hPa/
-    ...
+  temp/                                  ← 温度（无粒子）
+    850hPa/
+      tiles_manifest.json
+      3/{x}/{y}/{unix_ts}.png
+    2m/
+      ...
+  tcdc/                                  ← 总云量（无粒子）
+    atmos/
+      tiles_manifest.json
+      3/{x}/{y}/{unix_ts}.png
 ```
 
-### 可用等压面层
+### 可用变量与层级 token
 
-| 目录名 | 等压面 | 大约高度 |
-|--------|--------|---------|
-| `850hPa` | 850 hPa | ~1,500 m |
+| 变量 key | 含义 | 层级 token | 单位 | 含粒子 |
+|---------|------|-----------|------|--------|
+| `wind` | 风场（U/V 分量 + 风向箭头） | `1000hPa`/`850hPa`/.../`100hPa` | m/s | ✓ |
+| `temp` | 温度 | 等压面 8 层 + `2m` | °C | |
+| `rh` | 相对湿度 | 等压面 8 层 + `2m` | % | |
+| `spfh` | 比湿 | 等压面 8 层 + `2m` | g/kg | |
+| `dpt` | 露点温度 | `2m` | °C | |
+| `hgt` | 位势高度 | 等压面 8 层 | m | |
+| `tcdc` | 总云量 | `atmos` | % | |
+| `lcdc` | 低云量 | `atmos` | % | |
+| `mcdc` | 中云量 | `atmos` | % | |
+| `hcdc` | 高云量 | `atmos` | % | |
+| `vis` | 能见度 | `surface` | km | |
+| `apcp` | 累计降水 | `surface` | mm | |
+| `prate` | 降水率 | `surface` | mm/h | |
+| `pres` | 地表气压 | `surface` | hPa | |
+| `prmsl` | 海平面气压 | `msl` | hPa | |
+| `gust` | 地表阵风 | `surface` | m/s | |
 
 ### 瓦片规格
 
@@ -40,17 +63,26 @@ wind-tiles/
 - **缩放级别**: 3 – 4
 - **瓦片尺寸**: 256 × 256
 - **格式**: PNG with RGBA（透明背景）
-- **XYZ URL**: `{base}/{level}/{z}/{x}/{y}/{timestamp}.png`
+- **XYZ URL**: `{base}/{variable}/{level_token}/{z}/{x}/{y}/{timestamp}.png`
 
 ---
 
 ## tiles_manifest.json
 
-每层根目录下的清单文件，记录所有可用时间戳：
+每个 (variable, level_token) 根目录下的清单文件，记录所有可用时间戳：
 
 ```json
 {
-  "lastUpdated": "2026-05-19T15:31:38+08:00",
+  "lastUpdated": "2026-06-24T16:27:54+08:00",
+  "timestamps": [1779062400, 1779066000, 1779069600]
+}
+```
+
+风场变量（`wind`）额外包含 `particle` 字段：
+
+```json
+{
+  "lastUpdated": "2026-06-24T16:27:54+08:00",
   "timestamps": [1779062400, 1779066000, 1779069600],
   "particle": {
     "available": true,
@@ -60,14 +92,14 @@ wind-tiles/
 ```
 
 - `timestamps`: Unix 时间戳数组（秒），**直接就是瓦片文件名**
-- `particle.filenames`: 粒子 JSON 文件名数组
-- 拼接瓦片 URL：`${timestamps[i]}.png`，无需格式转换
+- `particle.filenames`: 粒子 JSON 文件名数组（仅 `wind` 变量）
+- 拼接瓦片 URL：`${variable}/${level_token}/{z}/{x}/${y}/${timestamps[i]}.png`
 
 ---
 
 ## XYZ 瓦片叠加
 
-### 粒子 JSON 格式
+### 粒子 JSON 格式（仅风场）
 
 每个 JSON 文件是两元素数组，分别包含 U（东西方向）和 V（南北方向）风场分量：
 
@@ -129,7 +161,7 @@ const map = new maplibregl.Map({
       },
       wind: {
         type: 'raster',
-        tiles: ['https://your-tiles-server.com/wind-tiles/850hPa/{z}/{x}/{y}/1779062400.png'],
+        tiles: ['https://your-tiles-server.com/wind-tiles/wind/850hPa/{z}/{x}/{y}/1779062400.png'],
         tileSize: 256,
         minzoom: 3,
         maxzoom: 8,
@@ -145,23 +177,47 @@ const map = new maplibregl.Map({
 });
 ```
 
+### 多变量叠加（风场 + 温度 + 云量）
+
+```js
+const ts = 1779062400;
+const layers = [
+  { id: 'wind',  path: 'wind/850hPa',     opacity: 0.7 },
+  { id: 'temp',  path: 'temp/2m',         opacity: 0.6 },
+  { id: 'tcdc',  path: 'tcdc/atmos',      opacity: 0.7 },
+];
+
+layers.forEach(({ id, path, opacity }) => {
+  map.addSource(id, {
+    type: 'raster',
+    tiles: [`https://your-tiles-server.com/wind-tiles/${path}/{z}/{x}/${y}/${ts}.png`],
+    tileSize: 256, minzoom: 3, maxzoom: 8
+  });
+  map.addLayer({
+    id: `${id}-layer`, type: 'raster', source: id,
+    paint: { 'raster-opacity': opacity }
+  });
+});
+```
+
 ### 动态切换时间（时间轴播放）
 
 ```js
-const LEVEL = '850hPa';
+const VAR = 'wind';
+const LEVEL_TOKEN = '850hPa';
 const TILE_BASE = 'https://your-tiles-server.com/wind-tiles';
 
 let timestamps = [];
 let currentIndex = 0;
 
 async function loadManifest() {
-  const res = await fetch(`${TILE_BASE}/${LEVEL}/tiles_manifest.json`);
+  const res = await fetch(`${TILE_BASE}/${VAR}/${LEVEL_TOKEN}/tiles_manifest.json`);
   timestamps = (await res.json()).timestamps;
 }
 
 function showFrame(index) {
   const ts = timestamps[index];
-  const url = `${TILE_BASE}/${LEVEL}/{z}/{x}/{y}/${ts}.png`;
+  const url = `${TILE_BASE}/${VAR}/${LEVEL_TOKEN}/{z}/{x}/{y}/${ts}.png`;
   if (map.getSource('wind')) {
     map.removeLayer('wind-layer');
     map.removeSource('wind');
@@ -189,7 +245,7 @@ const ts = 1779062400;
 levels.forEach(hpa => {
   map.addSource(`wind-${hpa}`, {
     type: 'raster',
-    tiles: [`https://your-tiles-server.com/wind-tiles/${hpa}/{z}/{x}/{y}/${ts}.png`],
+    tiles: [`https://your-tiles-server.com/wind-tiles/wind/${hpa}/{z}/{x}/${y}/${ts}.png`],
     tileSize: 256, minzoom: 3, maxzoom: 8
   });
   map.addLayer({
@@ -218,7 +274,7 @@ const map = new mapboxgl.Map({
 map.on('load', () => {
   map.addSource('wind', {
     type: 'raster',
-    tiles: ['https://your-tiles-server.com/wind-tiles/850hPa/{z}/{x}/{y}/1779062400.png'],
+    tiles: ['https://your-tiles-server.com/wind-tiles/wind/850hPa/{z}/{x}/{y}/1779062400.png'],
     tileSize: 256, minzoom: 3, maxzoom: 8
   });
   map.addLayer({ id: 'wind-layer', type: 'raster', source: 'wind', paint: { 'raster-opacity': 0.85 } });
@@ -229,7 +285,7 @@ map.on('load', () => {
 
 ## 风力粒子流（wind-layer）
 
-粒子效果使用 `@sakitam-gis/wind-layer` 库，与 Wind Toolkit 生成的粒子 JSON 完全兼容。
+粒子效果使用 `@sakitam-gis/wind-layer` 库，与 Wind Toolkit 生成的粒子 JSON 完全兼容。**仅 `wind` 变量有粒子数据**。
 
 ```bash
 npm install @sakitam-gis/wind-layer
@@ -279,13 +335,13 @@ map.on('zoom', () => {
 
 ## 瓦片 + 粒子叠加
 
-先添加色斑瓦片，再叠加粒子层，形成组合效果：
+先添加色斑瓦片，再叠加粒子层，形成组合效果（仅风场）：
 
 ```js
 // 色斑瓦片（底图上层）
 map.addSource('wind-raster', {
   type: 'raster',
-  tiles: [`${TILE_BASE}/${LEVEL}/{z}/{x}/${y}/${ts}.png`],
+  tiles: [`${TILE_BASE}/wind/${LEVEL}/{z}/{x}/${y}/${ts}.png`],
   tileSize: 256, minzoom: 3, maxzoom: 8
 });
 map.addLayer({
@@ -294,7 +350,7 @@ map.addLayer({
 });
 
 // 粒子层
-const res = await fetch(`${TILE_BASE}/${LEVEL}/particle/${ts}.json`);
+const res = await fetch(`${TILE_BASE}/wind/${LEVEL}/particle/${ts}.json`);
 const data = await res.json();
 const windLayer = new WindLayer.WindLayer('wind-particles', data, {
   windOptions: {
@@ -386,7 +442,7 @@ const windLayer = new WindLayer.WindLayer('wind-particles', data, {
     });
 
     async function loadManifest() {
-      const res = await fetch(`${TILE_BASE}/${currentLevel}/tiles_manifest.json`);
+      const res = await fetch(`${TILE_BASE}/wind/${currentLevel}/tiles_manifest.json`);
       const data = await res.json();
       timestamps = data.timestamps;
       idx = timestamps.length - 1;
@@ -396,14 +452,14 @@ const windLayer = new WindLayer.WindLayer('wind-particles', data, {
       const ts = timestamps[idx];
 
       // 更新瓦片图层
-      const url = `${TILE_BASE}/${currentLevel}/{z}/{x}/{y}/${ts}.png`;
+      const url = `${TILE_BASE}/wind/${currentLevel}/{z}/{x}/{y}/${ts}.png`;
       if (map.getSource('wind')) { map.removeLayer('wind-layer'); map.removeSource('wind'); }
       map.addSource('wind', { type: 'raster', tiles: [url], tileSize: 256, minzoom: 3, maxzoom: 8 });
       map.addLayer({ id: 'wind-layer', type: 'raster', source: 'wind', paint: { 'raster-opacity': 0.5 } });
 
       // 更新粒子层
       if (windLayer) { windLayer.remove(); windLayer = null; }
-      const particleRes = await fetch(`${TILE_BASE}/${currentLevel}/particle/${ts}.json`);
+      const particleRes = await fetch(`${TILE_BASE}/wind/${currentLevel}/particle/${ts}.json`);
       const particleData = await particleRes.json();
       windLayer = new WindLayer.WindLayer('wind-particles', particleData, {
         windOptions: {
@@ -488,7 +544,7 @@ const windLayer = new WindLayer.WindLayer('wind-particles', data, {
     });
 
     async function loadManifest() {
-      const res = await fetch(`${TILE_BASE}/${LEVEL}/tiles_manifest.json`);
+      const res = await fetch(`${TILE_BASE}/wind/${LEVEL}/tiles_manifest.json`);
       timestamps = (await res.json()).timestamps;
       idx = timestamps.length - 1;
     }
@@ -497,14 +553,14 @@ const windLayer = new WindLayer.WindLayer('wind-particles', data, {
       const ts = timestamps[idx];
 
       // 瓦片图层
-      const url = `${TILE_BASE}/${LEVEL}/{z}/{x}/{y}/${ts}.png`;
+      const url = `${TILE_BASE}/wind/${LEVEL}/{z}/{x}/{y}/${ts}.png`;
       if (map.getSource('wind')) { map.removeLayer('wind-layer'); map.removeSource('wind'); }
       map.addSource('wind', { type: 'raster', tiles: [url], tileSize: 256, minzoom: 3, maxzoom: 8 });
       map.addLayer({ id: 'wind-layer', type: 'raster', source: 'wind', paint: { 'raster-opacity': 0.5 } });
 
       // 粒子层
       if (windLayer) { windLayer.remove(); windLayer = null; }
-      const data = await (await fetch(`${TILE_BASE}/${LEVEL}/particle/${ts}.json`)).json();
+      const data = await (await fetch(`${TILE_BASE}/wind/${LEVEL}/particle/${ts}.json`)).json();
       windLayer = new WindLayer.WindLayer('wind-particles', data, {
         windOptions: {
           velocityScale: 1 / 25, maxAge: 90, lineWidth: 2, particleCount: 8000,
@@ -576,8 +632,10 @@ server {
 }
 ```
 
-瓦片 URL：`http://tiles.example.com/wind-tiles/850hPa/{z}/{x}/{y}/1779062400.png`
-粒子 URL：`http://tiles.example.com/wind-tiles/850hPa/particle/1779062400.json`
+风场瓦片 URL：`http://tiles.example.com/wind-tiles/wind/850hPa/{z}/{x}/{y}/1779062400.png`
+温度瓦片 URL：`http://tiles.example.com/wind-tiles/temp/2m/{z}/{x}/{y}/1779062400.png`
+云量瓦片 URL：`http://tiles.example.com/wind-tiles/tcdc/atmos/{z}/{x}/{y}/1779062400.png`
+粒子 URL（仅风场）：`http://tiles.example.com/wind-tiles/wind/850hPa/particle/1779062400.json`
 
 ### Python 一行启动（开发测试）
 
@@ -586,4 +644,4 @@ cd wind-toolkit
 python -m http.server 8080
 ```
 
-瓦片 URL：`http://localhost:8080/wind-tiles/850hPa/{z}/{x}/{y}/1779062400.png`
+瓦片 URL：`http://localhost:8080/wind-tiles/wind/850hPa/{z}/{x}/{y}/1779062400.png`
