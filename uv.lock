@@ -13,6 +13,47 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "atmos-toolkit"
+version = "0.3.0"
+source = { editable = "." }
+dependencies = [
+    { name = "cartopy" },
+    { name = "cfgrib" },
+    { name = "matplotlib" },
+    { name = "netcdf4" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pillow" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "scipy" },
+    { name = "xarray" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cartopy", specifier = ">=0.24.0" },
+    { name = "cfgrib", specifier = ">=0.9.15" },
+    { name = "matplotlib", specifier = ">=3.10.5" },
+    { name = "netcdf4", specifier = ">=1.7.2" },
+    { name = "numpy", specifier = ">=2.2.0" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "pillow", specifier = ">=11.0.0" },
+    { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "requests", specifier = ">=2.32.0" },
+    { name = "scipy", specifier = ">=1.15.0" },
+    { name = "xarray", specifier = ">=2025.7.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
+
+[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple" }
@@ -1067,47 +1108,6 @@ sdist = { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/53/0c/06
 wheels = [
     { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
 ]
-
-[[package]]
-name = "wind-toolkit"
-version = "0.3.0"
-source = { editable = "." }
-dependencies = [
-    { name = "cartopy" },
-    { name = "cfgrib" },
-    { name = "matplotlib" },
-    { name = "netcdf4" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pillow" },
-    { name = "python-dotenv" },
-    { name = "requests" },
-    { name = "scipy" },
-    { name = "xarray" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cartopy", specifier = ">=0.24.0" },
-    { name = "cfgrib", specifier = ">=0.9.15" },
-    { name = "matplotlib", specifier = ">=3.10.5" },
-    { name = "netcdf4", specifier = ">=1.7.2" },
-    { name = "numpy", specifier = ">=2.2.0" },
-    { name = "pandas", specifier = ">=2.2.0" },
-    { name = "pillow", specifier = ">=11.0.0" },
-    { name = "python-dotenv", specifier = ">=1.1.1" },
-    { name = "requests", specifier = ">=2.32.0" },
-    { name = "scipy", specifier = ">=1.15.0" },
-    { name = "xarray", specifier = ">=2025.7.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "xarray"
