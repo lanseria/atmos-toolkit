@@ -1,9 +1,7 @@
 """XYZ 瓦片生成模块。
 
-从原始气象数据生成透明 RGBA 瓦片：
-- 标量变量（温度/湿度/云量/降水/能见度/气压/HGT/GUST 等）仅含数据色斑
-- 风场含风速色斑 + 风向箭头
-所有瓦片均无底图、无标签、无地图要素，可直接叠加在任意 Web 地图底图上。
+从标量气象数据生成透明 RGBA 瓦片（仅数据色斑，无底图、无标签、无地图要素），
+可直接叠加在任意 Web 地图底图上。风场不再生成瓦片，仅由 wind_data_generator 输出粒子数据。
 """
 
 import json
@@ -13,7 +11,7 @@ from pathlib import Path
 import matplotlib.colors as mcolors
 import numpy as np
 import xarray as xr
-from PIL import Image, ImageDraw
+from PIL import Image
 from scipy.ndimage import gaussian_filter
 
 from . import config
@@ -82,29 +80,7 @@ def _build_cmap_lut(cmap_name: str) -> np.ndarray:
     return (lut * 255).astype(np.uint8)
 
 
-def _build_wind_cmap_lut() -> np.ndarray:
-    """向后兼容：风速 LUT。"""
-    return _build_cmap_lut("wind_speed")
-
-
-# ── 数据预处理（高斯平滑 + 4x 插值） ─────────────────────────────────
-def _interp_data(
-    data: np.ndarray,
-    lat: np.ndarray,
-    lon: np.ndarray,
-    interp_factor: int = 4,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """仅做 4x 三次插值（不平滑）。Returns: (hi_data, new_lats, new_lons)"""
-    da = xr.DataArray(
-        data, coords={"latitude": lat, "longitude": lon},
-        dims=["latitude", "longitude"],
-    )
-    new_lats = np.linspace(lat.min(), lat.max(), len(lat) * interp_factor)
-    new_lons = np.linspace(lon.min(), lon.max(), len(lon) * interp_factor)
-    hi = da.interp(latitude=new_lats, longitude=new_lons, method="cubic")
-    return hi.values, new_lats, new_lons
-
-
+# ── 数据预处理（高斯平滑 + 4x 三次插值） ─────────────────────────────
 def _smooth_and_interp(
     data: np.ndarray,
     lat: np.ndarray,
@@ -124,23 +100,6 @@ def _smooth_and_interp(
     new_lons = np.linspace(lon.min(), lon.max(), len(lon) * interp_factor)
     hi = da.interp(latitude=new_lats, longitude=new_lons, method="cubic")
     return hi.values, new_lats, new_lons
-
-
-def _prepare_wind_data(
-    u: np.ndarray,
-    v: np.ndarray,
-    lat: np.ndarray,
-    lon: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-    """风场数据预处理。Returns: (vis_speed, u_hi, v_hi, vis_lats, vis_lons, max_speed)"""
-    speed = np.sqrt(u**2 + v**2)
-    max_speed = float(np.nanmax(speed)) if not np.all(np.isnan(speed)) else 20.0
-
-    vis_speed, vis_lats, vis_lons = _smooth_and_interp(speed, lat, lon, sigma=1.5)
-    u_hi, _, _ = _interp_data(u, lat, lon)
-    v_hi, _, _ = _interp_data(v, lat, lon)
-
-    return vis_speed, u_hi, v_hi, vis_lats, vis_lons, max_speed
 
 
 # ── RGBA 叠加层构造 ───────────────────────────────────────────────────
@@ -165,56 +124,6 @@ def _build_scalar_overlay(
         nan_mask = nan_mask | (vis_data < nan_threshold)
     overlay[..., 3] = np.where(nan_mask, 0, int(alpha * 255)).astype(np.uint8)
     return overlay
-
-
-def _draw_wind_arrows(
-    overlay: np.ndarray,
-    u_hi: np.ndarray,
-    v_hi: np.ndarray,
-    vis_lats: np.ndarray,
-    vis_lons: np.ndarray,
-) -> np.ndarray:
-    """在已有 overlay 上绘制风向箭头（白色半透明）。"""
-    img = Image.fromarray(overlay, "RGBA")
-    draw = ImageDraw.Draw(img)
-
-    step_lat = max(1, len(vis_lats) // 30)
-    step_lon = max(1, len(vis_lons) // 30)
-    for i in range(0, len(vis_lats), step_lat):
-        for j in range(0, len(vis_lons), step_lon):
-            u_val = u_hi[i, j]
-            v_val = v_hi[i, j]
-            spd = np.sqrt(u_val**2 + v_val**2)
-            if np.isnan(spd) or spd < 0.5:
-                continue
-            angle = np.arctan2(v_val, u_val)
-            length = min(max(3, spd * 1.5), 10)
-            dx = length * np.cos(angle)
-            dy = -length * np.sin(angle)
-            draw.line(
-                [(j, i), (j + dx, i + dy)],
-                fill=(255, 255, 255, 128),
-                width=1,
-            )
-
-    return np.array(img)
-
-
-def _build_overlay(
-    vis_speed: np.ndarray,
-    u_hi: np.ndarray,
-    v_hi: np.ndarray,
-    vis_lats: np.ndarray,
-    vis_lons: np.ndarray,
-    max_speed: float,
-    cmap_lut: np.ndarray,
-    alpha: float = 0.8,
-) -> np.ndarray:
-    """向后兼容：风场专用 overlay（风速色斑 + 风向箭头）。"""
-    overlay = _build_scalar_overlay(
-        vis_speed, 0, max_speed, cmap_lut, alpha=alpha, nan_threshold=0.1
-    )
-    return _draw_wind_arrows(overlay, u_hi, v_hi, vis_lats, vis_lons)
 
 
 def _warp_tile(
@@ -304,57 +213,6 @@ def generate_scalar_tiles(
 
     cmap_lut = _build_cmap_lut(var_cfg["cmap"])
     overlay = _build_scalar_overlay(vis_data, vmin, vmax, cmap_lut, alpha=0.85)
-
-    src_bounds = (vis_lons.min(), vis_lons.max(), vis_lats.min(), vis_lats.max())
-    total = 0
-    for z in zoom_levels:
-        tiles = get_tiles_for_area(area, z)
-        for tz, tx, ty in tiles:
-            tile_data = _warp_tile(overlay, src_bounds, tz, tx, ty, tile_size)
-            out_path = output_dir / str(tz) / str(tx) / str(ty) / f"{timestamp}.png"
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(tile_data, "RGBA").save(out_path, "PNG")
-        total += len(tiles)
-        logger.info(f"  Zoom {z}: {len(tiles)} 个瓦片")
-
-    logger.info(f"瓦片生成完成: 共 {total} 个")
-    return total
-
-
-# ── 风场专用瓦片生成入口（向后兼容签名） ─────────────────────────────
-def generate_wind_tiles(
-    u: np.ndarray,
-    v: np.ndarray,
-    lat: np.ndarray,
-    lon: np.ndarray,
-    timestamp: str,
-    area: dict[str, float] | None = None,
-    output_dir: Path | None = None,
-    zoom_levels: range | None = None,
-    tile_size: int | None = None,
-) -> int:
-    """从原始风场数据生成透明 XYZ 瓦片（风速色斑 + 风向箭头）。
-
-    Args:
-        output_dir: 瓦片输出目录（必传）
-
-    Returns:
-        生成的瓦片总数
-    """
-    if area is None:
-        area = config.DISPLAY_AREA
-    if output_dir is None:
-        raise ValueError("generate_wind_tiles 需要传入 output_dir")
-    if zoom_levels is None:
-        zoom_levels = range(config.TILE_ZOOM_MIN, config.TILE_ZOOM_MAX + 1)
-    if tile_size is None:
-        tile_size = config.TILE_SIZE
-
-    logger.info(f"生成风场瓦片: {timestamp}, 缩放 {zoom_levels.start}-{zoom_levels.stop - 1}")
-
-    vis_speed, u_hi, v_hi, vis_lats, vis_lons, max_speed = _prepare_wind_data(u, v, lat, lon)
-    cmap_lut = _build_wind_cmap_lut()
-    overlay = _build_overlay(vis_speed, u_hi, v_hi, vis_lats, vis_lons, max_speed, cmap_lut)
 
     src_bounds = (vis_lons.min(), vis_lons.max(), vis_lats.min(), vis_lats.max())
     total = 0

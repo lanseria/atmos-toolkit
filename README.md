@@ -1,6 +1,6 @@
 # Atmos Toolkit
 
-GFS 多气象变量数据获取与地图可视化工具。从 NOAA GFS（Global Forecast System）0.25° 预报数据集下载 **16 种气象变量**（风场 U/V、温度、湿度、云量、能见度、降水、气压、阵风、位势高度等），生成暗色主题的精美气象地图 PNG，并切割为透明 XYZ 瓦片供 Web 地图叠加使用。
+GFS 多气象变量数据获取与地图可视化工具。从 NOAA GFS（Global Forecast System）0.25° 预报数据集下载 **16 种气象变量**（风场 U/V、温度、湿度、云量、能见度、降水、气压、阵风、位势高度等）：标量变量生成暗色主题气象地图 PNG 并切割为透明 XYZ 瓦片供 Web 地图叠加，风场则生成粒子流 JSON 数据供前端渲染动态风效。
 
 ## 数据集
 
@@ -11,7 +11,7 @@ GFS 多气象变量数据获取与地图可视化工具。从 NOAA GFS（Global 
 | 等压面层 | 1000 / 850 / 700 / 500 / 300 / 250 / 200 / 100 hPa |
 | 变量数 | 16 种气象变量 |
 | 预报周期 | 每 6 小时发布（00/06/12/18 UTC） |
-| 预报时长 | 默认 24 小时，可配置 |
+| 预报时长 | 默认 12 小时，可配置 |
 | 数据延迟 | 发布后约 4 小时可获取 |
 | 下载方式 | NOMADS GRIB Filter API（按变量+区域子集下载） |
 | 覆盖区域 | 全球（90°N–90°S, 180°W–180°E） |
@@ -23,7 +23,7 @@ GFS 多气象变量数据获取与地图可视化工具。从 NOAA GFS（Global 
 
 | 变量 key | 含义 | 层级 | 单位 | colormap |
 |---------|------|------|------|---------|
-| `wind` | 风场 U/V 分量（矢量，含风向箭头+粒子数据） | 等压面 8 层 | m/s | wind_speed |
+| `wind` | 风场 U/V 分量（矢量，仅生成粒子数据） | 等压面 8 层 | m/s | wind_speed |
 | `temp` | 温度 | 等压面 8 层 + 2m | °C | temp |
 | `rh` | 相对湿度 | 等压面 8 层 + 2m | % | humidity |
 | `spfh` | 比湿 | 等压面 8 层 + 2m | g/kg | humidity |
@@ -57,35 +57,39 @@ GFS 多气象变量数据获取与地图可视化工具。从 NOAA GFS（Global 
 
 ```
 NOAA GFS 0.25° 气象变量 → GRIB Filter 子集下载 → NetCDF
-    → 气象地图 PNG（暗色主题完整地图，按变量+层级分目录）
-    → 透明 XYZ 瓦片（按变量+层级分目录，可叠加任意底图）
+    → 标量变量：气象地图 PNG（暗色主题完整地图）+ 透明 XYZ 瓦片（可叠加任意底图）
+    → 风场：粒子流 JSON（供前端 wind-layer 渲染动态粒子效果）
 ```
 
 1. **数据获取**：通过 NOMADS GRIB Filter API 下载指定变量的 GFS 子集（自动按变量配置选择 `lev_xxx` 层级参数），自动回溯检测最新可用预报周期
-2. **地图生成**：加载 NetCDF → 单位转换 → 高斯平滑（sigma=1.5）+ 4× 三次插值增强 → cartopy 暗色主题地图渲染 PNG
-3. **瓦片生成**：从原始数据直接生成透明 RGBA 叠加层 → PlateCarree 重投影为 Web Mercator XYZ 瓦片（zoom 3–4，256×256）
-4. **瓦片清单**：每个 (variable, level) 组合生成 `tiles_manifest.json`（`lastUpdated` + Unix 时间戳数组），客户端可轮询获取可用时刻
+2. **地图/瓦片生成（标量变量）**：加载 NetCDF → 单位转换 → 高斯平滑（sigma=1.5）+ 4× 三次插值增强 → cartopy 暗色主题地图 PNG；从原始数据生成透明 RGBA 叠加层 → PlateCarree 重投影为 Web Mercator XYZ 瓦片（zoom 3–4，256×256）
+3. **粒子数据生成（风场）**：从 U/V 分量生成 wind-layer 兼容的粒子流 JSON
+4. **清单**：每个 (variable, level) 组合生成 `tiles_manifest.json`（`lastUpdated` + Unix 时间戳数组，风场额外含 `particle` 字段），客户端可轮询获取可用时刻
 
 ## 输出说明
 
-### 气象地图 PNG（`outputs/textures/{variable}/{level_token}/`）
+> 风场（`wind`）仅输出粒子流 JSON 数据（见下文「风场粒子数据」），不再生成 PNG 地图与 XYZ 瓦片；下述地图与瓦片仅适用于标量变量。
+
+### 气象地图 PNG（`outputs/textures/{variable}/{level_token}/`，仅标量变量）
 
 完整暗色主题气象地图，包含：
 
 - **数据色斑**：按变量自适应 colormap，contourf 等值线填充（温度/湿度/云量/降水/能见度等）
-- **风向箭头**（仅风场）：白色 quiver 箭头，稀疏采样
 - **地理要素**：cartopy 海岸线、中国国界 shapefile、九段线
 - **辅助元素**：colorbar（按变量单位）、经纬度网格线、UTC/BJT 双时区标题、层级标注
 
-### 透明 XYZ 瓦片（`atmos-tiles/{variable}/{level_token}/`）
+### 透明 XYZ 瓦片（`atmos-tiles/{variable}/{level_token}/`，仅标量变量）
 
-仅包含数据色斑（风场含风向箭头）的透明 RGBA 瓦片，无底图、无标签、无地图要素，可直接叠加在任意 Web 地图底图上（Leaflet/Mapbox 等）。
+仅包含数据色斑的透明 RGBA 瓦片，无底图、无标签、无地图要素，可直接叠加在任意 Web 地图底图上（Leaflet/Mapbox 等）。
 
-- 数据色斑 alpha = 0.8（风场）或 0.85（标量），无数据区域全透明
-- 风向箭头白色 alpha = 0.5（仅风场）
+- 数据色斑 alpha = 0.85，无数据区域全透明
 - Web Mercator 投影（EPSG:3857），zoom 3–4，256×256
 - 每个瓦片文件名按时间戳区分：`{z}/{x}/{y}/{unix_timestamp}.png`
-- 每个变量+层级独立目录：`atmos-tiles/wind/850hPa/`、`atmos-tiles/temp/2m/`、`atmos-tiles/tcdc/atmos/` 等
+- 每个变量+层级独立目录：`atmos-tiles/temp/2m/`、`atmos-tiles/tcdc/atmos/` 等
+
+### 风场粒子数据（`atmos-tiles/wind/{level_token}/particle/`，仅风场）
+
+从 U/V 分量生成的 wind-layer 兼容粒子流 JSON，供 Mapbox/MapLibre 前端渲染动态风力粒子效果。每个预报时刻一个文件：`particle/{unix_timestamp}.json`。
 
 瓦片清单 `tiles_manifest.json` 格式（每个 variable+level 独立一份）：
 
@@ -143,7 +147,7 @@ cp .env.example .env
 
 | 环境变量 | 说明 | 默认值 |
 |---------|------|--------|
-| `GFS_FORECAST_HOURS` | GFS 预报时长（小时） | `24` |
+| `GFS_FORECAST_HOURS` | GFS 预报时长（小时） | `12` |
 | `GFS_LATENCY_HOURS` | GFS 数据发布延迟（小时） | `4` |
 | `SCHEDULE_VARIABLES` | 调度模式下处理的变量列表（逗号分隔），如 `wind,temp,tcdc` | `wind` |
 | `NUM_WORKERS` | 并行工作进程数 | CPU 核数 / 2 |
@@ -153,7 +157,7 @@ cp .env.example .env
 ## 使用
 
 ```bash
-# 默认流程（风场所有等压面层：下载 + 生成地图 + 生成瓦片）
+# 默认流程（风场所有等压面层：下载 + 生成粒子数据）
 python -m src.atmos_toolkit.main
 
 # 仅处理风场 850 hPa 层
@@ -177,7 +181,7 @@ python -m src.atmos_toolkit.main --acquire-only
 # 仅生成地图和瓦片（使用已有数据）
 python -m src.atmos_toolkit.main --process-only
 
-# 按 GFS 周期智能调度（00/06/12/18 UTC + 延迟后自动运行）
+# 按 GFS 周期智能调度（启动立即执行一次，随后 00/06/12/18 UTC + 延迟后自动运行）
 python -m src.atmos_toolkit.main --schedule
 
 # 获取 48 小时预报
@@ -223,15 +227,13 @@ data/
     temp/2m/temp_merged.nc
     tcdc/atmos/tcdc_merged.nc
 outputs/
-  textures/                             # 气象地图 PNG
-    wind/850hPa/{unix_ts}.png
+  textures/                             # 气象地图 PNG（仅标量变量）
     temp/2m/{unix_ts}.png
     tcdc/atmos/{unix_ts}.png
 atmos-tiles/
-  wind/850hPa/                          # 风场瓦片（含粒子数据）
+  wind/850hPa/                          # 风场：仅粒子数据 + 清单（无瓦片 PNG）
     tiles_manifest.json
     particle/{unix_ts}.json
-    {z}/{x}/{y}/{unix_ts}.png
   temp/2m/                              # 温度 2m 瓦片（无粒子）
     tiles_manifest.json
     {z}/{x}/{y}/{unix_ts}.png
@@ -248,7 +250,7 @@ src/atmos_toolkit/
   data_acquisition.py    # NOMADS GRIB Filter 下载、自动周期检测、合并裁切
   processor.py           # NetCDF 加载、变量名识别、逐帧地图/瓦片生成调度
   map_visualizer.py      # 暗色主题气象地图渲染：字体、colormap、cartopy 绘图
-  tile_generator.py      # 透明 XYZ 瓦片生成（标量+风场双轨）+ 瓦片清单 manifest
+  tile_generator.py      # 标量变量透明 XYZ 瓦片生成 + 瓦片清单 manifest
   cleanup.py             # 过期数据清理（支持 variable+level 二维）
   wind_data_generator.py # 风场粒子流 JSON 数据生成（仅风场）
   main.py                # CLI 入口：--variable/-v 多变量、--schedule 智能调度

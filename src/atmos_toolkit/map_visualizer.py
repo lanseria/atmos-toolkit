@@ -1,7 +1,7 @@
 """气象变量地图可视化模块。
 
-提供暗色主题地图渲染，支持任意标量气象变量（温度/湿度/云量/降水/能见度/气压等）
-和风场专用渲染（含风向箭头）。
+提供暗色主题地图渲染，支持任意标量气象变量（温度/湿度/云量/降水/能见度/气压等）。
+风场不再渲染地图，仅由 wind_data_generator 输出粒子数据。
 """
 
 from datetime import datetime
@@ -60,11 +60,6 @@ def _build_colormap(cmap_name: str) -> mcolors.LinearSegmentedColormap:
     return mcolors.LinearSegmentedColormap.from_list(
         cmap_name, list(zip(spec["nodes"], spec["colors"]))
     )
-
-
-def _build_wind_cmap() -> mcolors.LinearSegmentedColormap:
-    """向后兼容：风速专用 colormap。"""
-    return _build_colormap("wind_speed")
 
 
 def _smooth_and_interpolate(
@@ -239,71 +234,5 @@ def generate_scalar_map(
     # 去掉可能的多余空格（level_label 为空时 "Temperature " → "Temperature"）
     title = " ".join(title.split())
     _draw_title(ax, title, timestamp)
-    _save_fig(fig, output_path)
-    return output_path
-
-
-# ── 风场专用渲染（含风速色斑 + quiver 风向箭头） ─────────────────────
-def generate_wind_map(
-    u: np.ndarray,
-    v: np.ndarray,
-    lat: np.ndarray,
-    lon: np.ndarray,
-    timestamp: datetime,
-    output_path: Path,
-    level_label: str | None = None,
-) -> Path:
-    """生成风场暗色主题地图。
-
-    Args:
-        u: 2D U 分量 (lat × lon)
-        v: 2D V 分量 (lat × lon)
-        lat: 1D 纬度数组
-        lon: 1D 经度数组
-        timestamp: 该帧时间
-        output_path: 输出 PNG 路径
-    """
-    speed = np.sqrt(u**2 + v**2)
-    max_speed = float(np.nanmax(speed)) if not np.all(np.isnan(speed)) else 20.0
-
-    # 风速做高斯平滑 + 插值（视觉增强）
-    vis_speed, vis_lats, vis_lons = _smooth_and_interpolate(speed, lat, lon)
-    # U/V 只插值不平滑，保留细节用于箭头
-    u_hi, _, _ = _smooth_and_interpolate(u, lat, lon, sigma=0)
-    v_hi, _, _ = _smooth_and_interpolate(v, lat, lon, sigma=0)
-
-    fig, ax, proj = _setup_axes()
-
-    cmap = _build_colormap("wind_speed")
-    levels = np.linspace(0, max_speed, 50)
-    cf = ax.contourf(
-        vis_lons, vis_lats, vis_speed,
-        levels=levels, cmap=cmap, transform=proj, extend="max", zorder=1,
-    )
-    _add_colorbar(fig, cf, "Wind Speed (m/s)")
-
-    # 风向箭头（精细稀疏采样）
-    skip_lat = max(1, len(vis_lats) // 30)
-    skip_lon = max(1, len(vis_lons) // 30)
-    ax.quiver(
-        vis_lons[::skip_lon],
-        vis_lats[::skip_lat],
-        u_hi[::skip_lat, ::skip_lon],
-        v_hi[::skip_lat, ::skip_lon],
-        color="white",
-        alpha=0.5,
-        scale=250,
-        width=0.002,
-        headwidth=3,
-        headlength=4,
-        transform=proj,
-        zorder=5,
-    )
-
-    _draw_geopolitical(ax, proj)
-    _draw_gridlines(ax)
-
-    prefix = f"Wind Field {level_label}" if level_label else "Wind Field"
-    _draw_title(ax, prefix, timestamp)
     _save_fig(fig, output_path)
     return output_path

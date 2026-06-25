@@ -11,7 +11,8 @@ services:
       - ${TILES_HOST_PATH:-./atmos-tiles}:/app/atmos-tiles
     env_file:
       - .env
-    # 默认定时模式（--schedule 30），可通过 command 覆盖：
+    # 默认定时模式：容器启动立即执行一次，随后按 GFS 周期（00/06/12/18 UTC + 延迟）调度
+    # 可通过 command 覆盖，例如一次性获取 48 小时预报：
     # command: ["--forecast-hours", "48"]
 
 volumes:

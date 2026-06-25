@@ -199,9 +199,9 @@ def run_scheduled(
 ) -> None:
     """按 GFS 数据发布周期智能调度。
 
-    在每个 GFS 周期数据可用后自动运行流水线（00/06/12/18 UTC + 延迟），
-    而非固定间隔轮询。默认仅处理 wind 850 hPa，执行前清理超过 2 天的旧数据。
-    通过 SCHEDULE_VARIABLES 环境变量可扩展为多变量调度。
+    容器（重新）部署后立即执行一次流水线，随后在每个 GFS 周期数据可用后
+    自动运行（00/06/12/18 UTC + 延迟）。默认仅处理 wind 850 hPa，执行前清理
+    超过 2 天的旧数据。通过 SCHEDULE_VARIABLES 环境变量可扩展为多变量调度。
     """
     import os
     from .cleanup import cleanup_old_data
@@ -211,11 +211,27 @@ def run_scheduled(
         var_names = env_vars.split(",") if env_vars else ["wind"]
 
     level_hpa = 850
+
+    def _run_once(reason: str) -> None:
+        """执行一次完整流水线（清理 + 下载 + 生成），异常不中断调度。"""
+        try:
+            logger.info(f"----- {reason}，开始执行 -----")
+            # 清理仅对 wind 等压面生效（cleanup.py Phase 2 才适配多变量）
+            if "wind" in var_names:
+                cleanup_old_data(level_hpa)
+            run_full_workflow(forecast_hours, var_names, level_hpa)
+        except Exception as e:
+            logger.error(f"流水线异常: {e}")
+
     logger.info(
         f"GFS 智能调度模式启动，处理变量: {', '.join(var_names)}；"
         f"等压面变量固定 {level_hpa} hPa 层；"
         f"延迟 {config.GFS_LATENCY_HOURS} 小时。按 Ctrl+C 停止。"
     )
+
+    # 容器（重新）部署后立即执行一次，无需等待下一个 GFS 周期
+    _run_once("启动立即执行")
+
     while True:
         next_time = _next_gfs_time()
         now = datetime.now(timezone.utc)
@@ -228,15 +244,7 @@ def run_scheduled(
         )
 
         time.sleep(max(0, wait_seconds))
-
-        try:
-            logger.info("----- GFS 数据更新，开始执行 -----")
-            # 清理仅对 wind 等压面生效（cleanup.py Phase 2 才适配多变量）
-            if "wind" in var_names:
-                cleanup_old_data(level_hpa)
-            run_full_workflow(forecast_hours, var_names, level_hpa)
-        except Exception as e:
-            logger.error(f"流水线异常: {e}")
+        _run_once("GFS 数据更新")
 
 
 def main() -> None:

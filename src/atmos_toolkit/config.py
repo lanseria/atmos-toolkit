@@ -72,7 +72,6 @@ VARIABLES: dict[str, dict] = {
         "vmin_vmax": "dynamic",
         "title_template": "Wind Field {level_label}",
         "generate_particle": True,
-        "draw_arrows": True,
     },
     # ── 温度（等压面 + 2m） ──
     "temp": {
@@ -389,7 +388,7 @@ GFS_URL_BASE: str = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 GFS_RESOLUTION: float = 0.25
 GFS_CYCLE_HOURS: list[int] = [0, 6, 12, 18]  # UTC
 GFS_LATENCY_HOURS: int = int(os.getenv("GFS_LATENCY_HOURS", "4"))
-GFS_FORECAST_HOURS: int = int(os.getenv("GFS_FORECAST_HOURS", "24"))
+GFS_FORECAST_HOURS: int = int(os.getenv("GFS_FORECAST_HOURS", "12"))
 
 # ── 地理范围 ───────────────────────────────────────────────────────────
 # 全球覆盖：南纬 90° 到北纬 90°，经度 -180° 到 180°

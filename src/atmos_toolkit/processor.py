@@ -1,7 +1,7 @@
 """将 NetCDF 数据处理为地图可视化 PNG 与 XYZ 瓦片。
 
 通用入口 `process_to_textures` 支持任意气象变量：
-- vector（风场）：调用 generate_wind_map + generate_wind_tiles + 风场粒子数据
+- vector（风场）：仅生成粒子数据 JSON（前端用 wind-layer 渲染动态粒子效果，不再生成 PNG 地图与 XYZ 瓦片）
 - scalar（温度/湿度/云量/降水/能见度/气压/HGT/GUST 等）：单位转换 + generate_scalar_map + generate_scalar_tiles
 """
 
@@ -12,10 +12,9 @@ import numpy as np
 import xarray as xr
 
 from . import config
-from .map_visualizer import generate_scalar_map, generate_wind_map
+from .map_visualizer import generate_scalar_map
 from .tile_generator import (
     generate_scalar_tiles,
-    generate_wind_tiles,
     update_tiles_manifest,
 )
 from .utils import format_timestamp, setup_logger
@@ -109,7 +108,9 @@ def process_to_textures(
     textures_dir = config.textures_dir_for(
         var_name, hpa=hpa, single_level_key=single_level_key
     )
-    textures_dir.mkdir(parents=True, exist_ok=True)
+    # 风场仅生成粒子数据，不再写入 textures 目录
+    if var_cfg["kind"] != "vector":
+        textures_dir.mkdir(parents=True, exist_ok=True)
     tile_dir = config.tile_dir_for(
         var_name, hpa=hpa, single_level_key=single_level_key
     )
@@ -123,17 +124,12 @@ def process_to_textures(
         stamp = format_timestamp(t)
         datetimes.append(t)
 
-        out_path = textures_dir / f"{stamp}.png"
-
         if var_cfg["kind"] == "vector":
+            # 风场：仅生成粒子数据 JSON（前端用 wind-layer 渲染动态粒子效果，
+            # 不再生成 PNG 地图与 XYZ 瓦片）
             u_name, v_name = _identify_nc_var(ds, var_cfg)
             u_data = ds[u_name].isel(time=i).values
             v_data = ds[v_name].isel(time=i).values
-
-            generate_wind_map(u_data, v_data, lat_vals, lon_vals, t, out_path, level_label)
-            generate_wind_tiles(
-                u_data, v_data, lat_vals, lon_vals, stamp, output_dir=tile_dir
-            )
 
             if var_cfg.get("generate_particle"):
                 particle_dir = config.particle_data_dir_for(
@@ -145,6 +141,8 @@ def process_to_textures(
                     output_dir=particle_dir,
                 )
         else:
+            # 标量：单位转换 + 暗色主题地图 PNG + 透明 XYZ 瓦片
+            out_path = textures_dir / f"{stamp}.png"
             name = _identify_nc_var(ds, var_cfg)
             raw = ds[name].isel(time=i).values
             data = config.apply_unit_convert(raw, var_cfg)
@@ -155,8 +153,8 @@ def process_to_textures(
             generate_scalar_tiles(
                 data, lat_vals, lon_vals, stamp, var_cfg, output_dir=tile_dir
             )
+            output_files.append(out_path)
 
-        output_files.append(out_path)
         if (i + 1) % 5 == 0 or i == len(times) - 1:
             logger.info(f"  [{log_prefix}] 进度: {i + 1}/{len(times)} 帧")
 
@@ -165,7 +163,10 @@ def process_to_textures(
         var_name, hpa=hpa, single_level_key=single_level_key
     )
     update_tiles_manifest(datetimes, manifest_path, particle_dir=particle_dir)
-    logger.info(f"[{log_prefix}] 地图生成完成: {len(output_files)} 张 → {textures_dir}")
+    if output_files:
+        logger.info(f"[{log_prefix}] 地图生成完成: {len(output_files)} 张 → {textures_dir}")
+    else:
+        logger.info(f"[{log_prefix}] 粒子数据生成完成 → {particle_dir}")
     return output_files
 
 
