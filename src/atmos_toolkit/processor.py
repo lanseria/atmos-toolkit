@@ -92,7 +92,7 @@ def process_to_textures(
 
     ds = xr.open_dataset(nc_path)
     logger.info(
-        f"[{log_prefix}] 加载 NetCDF: dims={dict(ds.dims)}, "
+        f"[{log_prefix}] 加载 NetCDF: dims={dict(ds.sizes)}, "
         f"时间范围 {ds.time.values[0]} ~ {ds.time.values[-1]}"
     )
 
