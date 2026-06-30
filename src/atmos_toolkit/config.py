@@ -48,6 +48,9 @@ LEVEL_KEY_MAP: dict[str, str] = {
     "10m_above_ground": "lev_10_m_above_ground",
     "entire_atmosphere": "lev_entire_atmosphere",
     "mean_sea_level": "lev_mean_sea_level",
+    "low_cloud_layer": "lev_low_cloud_layer",
+    "middle_cloud_layer": "lev_middle_cloud_layer",
+    "high_cloud_layer": "lev_high_cloud_layer",
 }
 
 # 单层虚拟目录 token（用于路径分目录）
@@ -57,6 +60,9 @@ SINGLE_LEVEL_KEYS: dict[str, str] = {
     "10m_above_ground": "10m",
     "entire_atmosphere": "atmos",
     "mean_sea_level": "msl",
+    "low_cloud_layer": "low",
+    "middle_cloud_layer": "middle",
+    "high_cloud_layer": "high",
 }
 
 VARIABLES: dict[str, dict] = {
@@ -164,7 +170,7 @@ VARIABLES: dict[str, dict] = {
         "nc_names": [["lcc", "lcdc", "low_cloud_cover"]],
         "unit": "%",
         "level_type": "single",
-        "single_level_key": "entire_atmosphere",
+        "single_level_key": "low_cloud_layer",
         "cmap": "cloud",
         "vmin_vmax": (0, 100),
         "title_template": "Low Cloud Cover",
@@ -177,7 +183,7 @@ VARIABLES: dict[str, dict] = {
         "nc_names": [["mcc", "mcdc", "middle_cloud_cover"]],
         "unit": "%",
         "level_type": "single",
-        "single_level_key": "entire_atmosphere",
+        "single_level_key": "middle_cloud_layer",
         "cmap": "cloud",
         "vmin_vmax": (0, 100),
         "title_template": "Middle Cloud Cover",
@@ -190,7 +196,7 @@ VARIABLES: dict[str, dict] = {
         "nc_names": [["hcc", "hcdc", "high_cloud_cover"]],
         "unit": "%",
         "level_type": "single",
-        "single_level_key": "entire_atmosphere",
+        "single_level_key": "high_cloud_layer",
         "cmap": "cloud",
         "vmin_vmax": (0, 100),
         "title_template": "High Cloud Cover",
